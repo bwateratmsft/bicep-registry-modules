@@ -1,10 +1,10 @@
 # Function App Pattern `[App/FunctionApp]`
 
-Deploys an Azure Function App on Flex Consumption, Elastic Premium, or Dedicated hosting together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access). Classic Consumption (Y1) is not supported because it cannot access network-secured host storage.
+Deploys an Azure Function App together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access wherever the selected plan family supports it).
 
-This experimental configuration creates a same-region virtual network and a dedicated integration subnet with a Network Security Group and a Microsoft.Storage service endpoint. The subnet is delegated to Microsoft.App/environments for Flex Consumption or Microsoft.Web/serverFarms for other plans. Storage denies all networks except that subnet. Premium content shares are created explicitly and routed through the virtual network. The Function App and its authenticated deployment endpoint remain publicly reachable. The NSG blocks outbound SSH and RDP to the virtual network. No private endpoints, NAT gateway, or private DNS zones are provisioned. Flex Consumption requires the Microsoft.App resource provider to be registered and a supported region. The default /26 subnet is dedicated to this app; Windows Premium apps scaling to 100 instances should use /24. Choose non-overlapping address prefixes if connecting this network to other networks.
+A same-region virtual network and dedicated integration subnet restrict storage access to the Function App's subnet through a Microsoft.Storage service endpoint. The subnet's Network Security Group blocks outbound SSH and RDP within the virtual network. Flex Consumption, Elastic Premium and Dedicated plans are supported; classic Consumption (`Y1`) is not supported because it lacks VNet integration. Flex Consumption requires the Microsoft.App resource provider to be registered. Choose a region supporting the selected plan and non-overlapping network prefixes; Windows Premium apps scaling to 100 instances should use a /24 subnet. The app and its authenticated deployment endpoint remain publicly reachable. No private endpoints, private DNS zones or NAT gateway are deployed.
 
-For Elastic Premium, the share is created before the app, and content-share traffic uses VNet integration. `WEBSITE_CONTENTOVERVNET=1` is retained as a provisioning compatibility setting alongside `outboundVnetRouting.contentShareTraffic`. `WEBSITE_SKIP_CONTENTSHARE_VALIDATION=1` skips the provisioning-time content-share check that can be blocked by the storage firewall. Neither setting bypasses storage network rules or authentication; verify runtime content-share access when deploying application code. See [Azure Functions content-share settings](https://learn.microsoft.com/azure/azure-functions/functions-app-settings#website_contentovervnet).
+Elastic Premium content shares are created before the app and routed through VNet integration. `WEBSITE_CONTENTOVERVNET=1` provides provisioning compatibility alongside `outboundVnetRouting.contentShareTraffic`; `WEBSITE_SKIP_CONTENTSHARE_VALIDATION=1` skips the provisioning-time check blocked by the storage firewall. Neither bypasses runtime network rules or authentication. See [Azure Functions content-share settings](https://learn.microsoft.com/azure/azure-functions/functions-app-settings#website_contentovervnet).
 
 Application Insights requires Microsoft Entra authentication. The Function App's managed identity receives the Monitoring Metrics Publisher role on the Application Insights resource, and the Functions host is configured to use that identity. Local authentication is disabled. Application code that sends telemetry directly through an SDK, such as a .NET isolated worker, must also configure Microsoft Entra credentials; the host setting alone does not configure every SDK. The Functions host's managed-identity authentication setting does not support local development. Use a separate development telemetry resource or an appropriately authenticated SDK for local telemetry. See [Configure monitoring for Azure Functions](https://learn.microsoft.com/azure/azure-functions/configure-monitoring#require-microsoft-entra-authentication).
 
@@ -98,7 +98,7 @@ The following section provides usage examples for the module, which were used to
 
 ### Example 1: _Using Dedicated Windows hosting_
 
-This instance deploys a Windows Function App on a Dedicated plan with subnet-restricted runtime storage.
+This instance deploys a Windows Function App on a Dedicated plan with managed-identity runtime storage access.
 
 You can find the full example and the setup of its dependencies in the deployment test folder path [/tests/e2e/dedicated]
 
@@ -116,9 +116,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
     appServicePlanSkuName: 'B1'
     functionAppKind: 'functionapp'
     functionWorkerRuntime: 'dotnet-isolated'
-    integrationSubnetAddressPrefix: '10.30.0.0/26'
     runtimeVersion: '8.0'
-    virtualNetworkAddressPrefix: '10.30.0.0/24'
   }
 }
 ```
@@ -149,14 +147,8 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
     "functionWorkerRuntime": {
       "value": "dotnet-isolated"
     },
-    "integrationSubnetAddressPrefix": {
-      "value": "10.30.0.0/26"
-    },
     "runtimeVersion": {
       "value": "8.0"
-    },
-    "virtualNetworkAddressPrefix": {
-      "value": "10.30.0.0/24"
     }
   }
 }
@@ -178,9 +170,7 @@ param functionAppName = '<functionAppName>'
 param appServicePlanSkuName = 'B1'
 param functionAppKind = 'functionapp'
 param functionWorkerRuntime = 'dotnet-isolated'
-param integrationSubnetAddressPrefix = '10.30.0.0/26'
 param runtimeVersion = '8.0'
-param virtualNetworkAddressPrefix = '10.30.0.0/24'
 ```
 
 </details>
@@ -503,9 +493,9 @@ param virtualNetworkName = '<virtualNetworkName>'
 | :-- | :-- | :-- |
 | [`applicationInsightsName`](#parameter-applicationinsightsname) | string | The name of the Application Insights component. Defaults to `<functionAppName>-ai`. |
 | [`appServicePlanName`](#parameter-appserviceplanname) | string | The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`. |
-| [`appServicePlanSkuCapacity`](#parameter-appserviceplanskucapacity) | int | Number of workers for Premium and Dedicated App Service Plans. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. Flex Consumption scales dynamically. |
-| [`appServicePlanSkuName`](#parameter-appserviceplanskuname) | string | The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Premium and Dedicated SKUs also support subnet-restricted storage. Classic Consumption (`Y1`) is not supported because it lacks VNet integration. |
-| [`appServicePlanZoneRedundant`](#parameter-appserviceplanzoneredundant) | bool | Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2. Also selects `Standard_ZRS` for the runtime and content storage account, as required for zone-redundant Functions hosting; otherwise storage uses `Standard_LRS`. Zone redundancy increases storage cost and requires a region that supports ZRS. |
+| [`appServicePlanSkuCapacity`](#parameter-appserviceplanskucapacity) | int | Number of workers for the App Service Plan. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. |
+| [`appServicePlanSkuName`](#parameter-appserviceplanskuname) | string | The SKU of the App Service Plan that hosts the Function App. Defaults to `FC1` (Flex Consumption). When `FC1` is selected the module wires up `functionAppConfig` (identity-based deployment storage, runtime, instance memory, max instance count) on the underlying `avm/res/web/site` module automatically; Flex Consumption is Linux-only and does not support the in-process `dotnet` runtime — use `dotnet-isolated` instead. Always On is enabled for Dedicated plans to keep non-HTTP triggers active. |
+| [`appServicePlanZoneRedundant`](#parameter-appserviceplanzoneredundant) | bool | Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in regions that offer availability zones, and requires `appServicePlanSkuCapacity` to be at least 2. Also selects `Standard_ZRS` for runtime storage instead of `Standard_LRS`, as zone-enabled Function Apps require zone-redundant storage. Left `false` by default because zone redundancy increases compute and storage costs and is not available in every region. |
 | [`appSettingsKeyValuePairs`](#parameter-appsettingskeyvaluepairs) | object | Application settings (`name`/`value` pairs) to merge into the Function App configuration. All values must be strings. Reserved keys managed by this module are silently dropped to keep the Function App in a working state — see `reservedAppSettingKeys` in `main.bicep` for the current list. |
 | [`autoGeneratedDomainNameLabelScope`](#parameter-autogenerateddomainnamelabelscope) | string | The scope of uniqueness for the default hostname of the Function App during resource creation. |
 | [`corsAllowedOrigins`](#parameter-corsallowedorigins) | array | The list of origins that are permitted to make cross-origin requests to the Function App (e.g. `https://portal.azure.com`). When non-empty, these are set as the CORS allowed origins in the site configuration. |
@@ -515,14 +505,14 @@ param virtualNetworkName = '<virtualNetworkName>'
 | [`flexConsumptionDeploymentStorageContainerName`](#parameter-flexconsumptiondeploymentstoragecontainername) | string | (Flex Consumption only) Name of the blob container that stores the Function App's deployment package. Created in the runtime Storage Account when `appServicePlanSkuName` is `FC1`. |
 | [`flexConsumptionInstanceMemoryMB`](#parameter-flexconsumptioninstancememorymb) | int | (Flex Consumption only) Memory allocated to each instance of the Function App in MB. Allowed values are 512, 2048, and 4096. |
 | [`flexConsumptionMaximumInstanceCount`](#parameter-flexconsumptionmaximuminstancecount) | int | (Flex Consumption only) Maximum number of instances the Function App can scale out to. Allowed range is 40-1000. |
-| [`functionAppKind`](#parameter-functionappkind) | string | The kind of Function App. Flex Consumption requires `functionapp,linux`; Premium and Dedicated also support Windows (`functionapp`). Container-based Function Apps are not supported by this pattern. |
+| [`functionAppKind`](#parameter-functionappkind) | string | The kind of Function App to deploy. `functionapp` (Windows) and `functionapp,linux` (Linux) are the standard values; `functionapp,workflowapp` is for Logic Apps Standard. Container-based Function Apps (`functionapp,linux,container`) are not yet supported by this pattern module — they require dedicated container image / registry parameters and are planned for a future release. |
 | [`functionAppTags`](#parameter-functionapptags) | object | Additional tags to apply only to the Function App resource (merged on top of `tags`). Typically used to surface the AZD service mapping via the `azd-service-name` tag. |
 | [`functionWorkerRuntime`](#parameter-functionworkerruntime) | string | The runtime stack of the Function App, e.g. `dotnet-isolated`, `node`, `python`, `java`, `powershell`. Note: `dotnet` (in-process .NET) is **not** supported on Flex Consumption (`FC1`); use `dotnet-isolated` instead. |
 | [`integrationSubnetAddressPrefix`](#parameter-integrationsubnetaddressprefix) | string | The IPv4 CIDR prefix of the dedicated integration subnet. Must be within the virtual network address space. Use /27 or larger for Flex Consumption; /26 or larger is recommended for Premium and Dedicated scaling. |
 | [`location`](#parameter-location) | string | The Azure region into which all resources will be deployed. |
 | [`lock`](#parameter-lock) | object | The lock settings for all resources deployed by this module. |
 | [`logAnalyticsWorkspaceResourceId`](#parameter-loganalyticsworkspaceresourceid) | string | Resource ID of an *existing* Log Analytics workspace (anywhere in the tenant) to associate with Application Insights. When empty, a new workspace named `<functionAppName>-law` is created in the current resource group. |
-| [`runtimeVersion`](#parameter-runtimeversion) | string | The language runtime version (e.g. `22` for Node.js 22, `3.11` for Python, or `8.0` for .NET). Sets `functionAppConfig.runtime` for Flex Consumption, `linuxFxVersion` for other Linux plans, or the matching framework version property on Windows. When empty, Linux uses the module defaults and Windows uses the platform default. |
+| [`runtimeVersion`](#parameter-runtimeversion) | string | The version of the language runtime stack (e.g. `22` for Node 22, `3.11` for Python 3.11, `8.0` for .NET 8). When provided, sets `linuxFxVersion` for Linux Function Apps or the matching framework version property for Windows Function Apps. When empty AND the Function App is Linux, a sensible per-runtime default is applied (see `defaultLinuxRuntimeVersionMap` in `main.bicep`); Windows Function Apps fall back to the platform default for the chosen runtime. |
 | [`storageAccountName`](#parameter-storageaccountname) | string | The name of the Storage Account that backs the Function App runtime. Must be globally unique, 3-24 lowercase alphanumeric characters. Defaults to a deterministic name derived from `functionAppName`. Function App names only allow alphanumeric and hyphens, so only hyphens need to be stripped to satisfy Storage Account naming constraints. |
 | [`tags`](#parameter-tags) | object | Resource tags to apply to all created resources. The runtime Storage Account is always tagged with `resource-usage: azure-functions`. |
 | [`userAssignedIdentityResourceId`](#parameter-userassignedidentityresourceid) | string | The resource ID of an existing User-Assigned Managed Identity to assign to the Function App and use for runtime storage access and Application Insights ingestion. When not provided, a new identity is created and used. |
@@ -554,7 +544,7 @@ The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`.
 
 ### Parameter: `appServicePlanSkuCapacity`
 
-Number of workers for Premium and Dedicated App Service Plans. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. Flex Consumption scales dynamically.
+Number of workers for the App Service Plan. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity.
 
 - Required: No
 - Type: int
@@ -563,7 +553,7 @@ Number of workers for Premium and Dedicated App Service Plans. Also sets the max
 
 ### Parameter: `appServicePlanSkuName`
 
-The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Premium and Dedicated SKUs also support subnet-restricted storage. Classic Consumption (`Y1`) is not supported because it lacks VNet integration.
+The SKU of the App Service Plan that hosts the Function App. Defaults to `FC1` (Flex Consumption). When `FC1` is selected the module wires up `functionAppConfig` (identity-based deployment storage, runtime, instance memory, max instance count) on the underlying `avm/res/web/site` module automatically; Flex Consumption is Linux-only and does not support the in-process `dotnet` runtime — use `dotnet-isolated` instead. Always On is enabled for Dedicated plans to keep non-HTTP triggers active.
 
 - Required: No
 - Type: string
@@ -598,7 +588,7 @@ The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Pre
 
 ### Parameter: `appServicePlanZoneRedundant`
 
-Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2. Also selects `Standard_ZRS` for the runtime and content storage account, as required for zone-redundant Functions hosting; otherwise storage uses `Standard_LRS`. Zone redundancy increases storage cost and requires a region that supports ZRS.
+Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in regions that offer availability zones, and requires `appServicePlanSkuCapacity` to be at least 2. Also selects `Standard_ZRS` for runtime storage instead of `Standard_LRS`, as zone-enabled Function Apps require zone-redundant storage. Left `false` by default because zone redundancy increases compute and storage costs and is not available in every region.
 
 - Required: No
 - Type: bool
@@ -846,7 +836,7 @@ Enable/Disable usage telemetry for module.
 
 ### Parameter: `functionAppKind`
 
-The kind of Function App. Flex Consumption requires `functionapp,linux`; Premium and Dedicated also support Windows (`functionapp`). Container-based Function Apps are not supported by this pattern.
+The kind of Function App to deploy. `functionapp` (Windows) and `functionapp,linux` (Linux) are the standard values; `functionapp,workflowapp` is for Logic Apps Standard. Container-based Function Apps (`functionapp,linux,container`) are not yet supported by this pattern module — they require dedicated container image / registry parameters and are planned for a future release.
 
 - Required: No
 - Type: string
@@ -956,7 +946,7 @@ Resource ID of an *existing* Log Analytics workspace (anywhere in the tenant) to
 
 ### Parameter: `runtimeVersion`
 
-The language runtime version (e.g. `22` for Node.js 22, `3.11` for Python, or `8.0` for .NET). Sets `functionAppConfig.runtime` for Flex Consumption, `linuxFxVersion` for other Linux plans, or the matching framework version property on Windows. When empty, Linux uses the module defaults and Windows uses the platform default.
+The version of the language runtime stack (e.g. `22` for Node 22, `3.11` for Python 3.11, `8.0` for .NET 8). When provided, sets `linuxFxVersion` for Linux Function Apps or the matching framework version property for Windows Function Apps. When empty AND the Function App is Linux, a sensible per-runtime default is applied (see `defaultLinuxRuntimeVersionMap` in `main.bicep`); Windows Function Apps fall back to the platform default for the chosen runtime.
 
 - Required: No
 - Type: string

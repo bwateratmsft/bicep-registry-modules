@@ -1,7 +1,7 @@
 targetScope = 'subscription'
 
 metadata name = 'Using Dedicated Windows hosting'
-metadata description = 'This instance deploys a Windows Function App on a Dedicated plan with subnet-restricted runtime storage.'
+metadata description = 'This instance deploys a Windows Function App on a Dedicated plan with managed-identity runtime storage access.'
 
 @description('Optional. The name of the resource group to deploy for testing purposes.')
 @maxLength(90)
@@ -37,8 +37,6 @@ module testDeployment '../../../main.bicep' = [
       functionAppKind: 'functionapp'
       functionWorkerRuntime: 'dotnet-isolated'
       runtimeVersion: '8.0'
-      virtualNetworkAddressPrefix: '10.30.0.0/24'
-      integrationSubnetAddressPrefix: '10.30.0.0/26'
     }
   }
 ]
