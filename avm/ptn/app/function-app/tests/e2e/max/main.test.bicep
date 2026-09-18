@@ -13,8 +13,11 @@ param resourceGroupName string = 'dep-${namePrefix}-app.function-app-${serviceSh
 @description('Optional. The location to deploy resources to.')
 param resourceLocation string = deployment().location
 
-@description('Optional. A short identifier for the kind of deployment. Should be kept short to not run into resource-name length-constraints.')
-param serviceShort string = 'afamax'
+@description('Optional. An identifier for this test invocation. The generated portion isolates resources from earlier runs while remaining stable for deployment retries.')
+param serviceShort string = 'afa${uniqueString(baseTime, resourceLocation, 'max')}max'
+
+@description('Generated. Used as a basis for unique resource names. The pipeline supplies a fixed value for all retries.')
+param baseTime string = utcNow('u')
 
 @description('Optional. A token to inject into the name of each resource.')
 param namePrefix string = '#_namePrefix_#'
@@ -25,6 +28,8 @@ param namePrefix string = '#_namePrefix_#'
 
 // General resources
 // =================
+// Test groups are intentionally unique per invocation; CI fixes baseTime across retries.
+#disable-next-line use-stable-resource-identifiers
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2025-04-01' = {
   name: resourceGroupName
   location: resourceLocation

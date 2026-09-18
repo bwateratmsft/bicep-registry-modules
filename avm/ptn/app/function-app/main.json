@@ -6,7 +6,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.43.8.12551",
-      "templateHash": "15214617788644749505"
+      "templateHash": "8825088559261553747"
     },
     "name": "Function App Pattern",
     "description": "Deploys an Azure Function App on Flex Consumption, Elastic Premium, or Dedicated hosting together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access). Classic Consumption (Y1) is not supported because it cannot access network-secured host storage.\n\nThis experimental configuration creates a same-region virtual network and a dedicated integration subnet with a Network Security Group and a Microsoft.Storage service endpoint. The subnet is delegated to Microsoft.App/environments for Flex Consumption or Microsoft.Web/serverFarms for other plans. Storage denies all networks except that subnet. Premium content shares are created explicitly and routed through the virtual network. The Function App and its authenticated deployment endpoint remain publicly reachable. The NSG blocks outbound SSH and RDP to the virtual network. No private endpoints, NAT gateway, or private DNS zones are provisioned. Flex Consumption requires the Microsoft.App resource provider to be registered and a supported region. The default /26 subnet is dedicated to this app; Windows Premium apps scaling to 100 instances should use /24. Choose non-overlapping address prefixes if connecting this network to other networks.\n\nApplication Insights requires Microsoft Entra authentication. The Function App's managed identity receives the Monitoring Metrics Publisher role on the Application Insights resource, and the Functions host is configured to use that identity. Local authentication is disabled. Application code that sends telemetry directly through an SDK, such as a .NET isolated worker, must also configure Microsoft Entra credentials; the host setting alone does not configure every SDK. The Functions host's managed-identity authentication setting does not support local development. Use a separate development telemetry resource or an appropriately authenticated SDK for local telemetry. See [Configure monitoring for Azure Functions](https://learn.microsoft.com/azure/azure-functions/configure-monitoring#require-microsoft-entra-authentication).\n"
@@ -327,7 +327,7 @@
       "defaultValue": 1,
       "minValue": 1,
       "metadata": {
-        "description": "Optional. Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically."
+        "description": "Optional. Number of workers for Premium and Dedicated App Service Plans. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. Flex Consumption scales dynamically."
       }
     },
     "appServicePlanZoneRedundant": {
@@ -16165,6 +16165,10 @@
           },
           "skuCapacity": {
             "value": "[parameters('appServicePlanSkuCapacity')]"
+          },
+          "maximumElasticWorkerCount": "[if(variables('isElasticPremium'), createObject('value', parameters('appServicePlanSkuCapacity')), createObject('value', 1))]",
+          "elasticScaleEnabled": {
+            "value": false
           },
           "kind": {
             "value": "[variables('serverFarmKind')]"

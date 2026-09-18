@@ -92,7 +92,7 @@ param functionAppKind string = 'functionapp,linux'
 ])
 param appServicePlanSkuName string = 'FC1'
 
-@description('Optional. Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically.')
+@description('Optional. Number of workers for Premium and Dedicated App Service Plans. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. Flex Consumption scales dynamically.')
 @minValue(1)
 param appServicePlanSkuCapacity int = 1
 
@@ -596,6 +596,9 @@ module appServicePlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
     lock: lock
     skuName: appServicePlanSkuName
     skuCapacity: appServicePlanSkuCapacity
+    maximumElasticWorkerCount: isElasticPremium ? appServicePlanSkuCapacity : 1
+    // Avoid enabling App Service automatic scaling through the resource module's derived default.
+    elasticScaleEnabled: false
     kind: serverFarmKind
     reserved: isLinux
     zoneRedundant: appServicePlanZoneRedundant

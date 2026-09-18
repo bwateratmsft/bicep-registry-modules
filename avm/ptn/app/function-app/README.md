@@ -109,7 +109,7 @@ You can find the full example and the setup of its dependencies in the deploymen
 module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
   params: {
     // Required parameters
-    functionAppName: 'afaded001'
+    functionAppName: '<functionAppName>'
     // Non-required parameters
     appServicePlanSkuName: 'B1'
     functionAppKind: 'functionapp'
@@ -135,7 +135,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
   "parameters": {
     // Required parameters
     "functionAppName": {
-      "value": "afaded001"
+      "value": "<functionAppName>"
     },
     // Non-required parameters
     "appServicePlanSkuName": {
@@ -171,7 +171,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
 using 'br/public:avm/ptn/app/function-app:<version>'
 
 // Required parameters
-param functionAppName = 'afaded001'
+param functionAppName = '<functionAppName>'
 // Non-required parameters
 param appServicePlanSkuName = 'B1'
 param functionAppKind = 'functionapp'
@@ -198,7 +198,7 @@ You can find the full example and the setup of its dependencies in the deploymen
 ```bicep
 module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
   params: {
-    functionAppName: 'afamin001'
+    functionAppName: '<functionAppName>'
   }
 }
 ```
@@ -216,7 +216,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
   "contentVersion": "1.0.0.0",
   "parameters": {
     "functionAppName": {
-      "value": "afamin001"
+      "value": "<functionAppName>"
     }
   }
 }
@@ -232,7 +232,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
 ```bicep-params
 using 'br/public:avm/ptn/app/function-app:<version>'
 
-param functionAppName = 'afamin001'
+param functionAppName = '<functionAppName>'
 ```
 
 </details>
@@ -253,10 +253,10 @@ You can find the full example and the setup of its dependencies in the deploymen
 module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
   params: {
     // Required parameters
-    functionAppName: 'afamax001'
+    functionAppName: '<functionAppName>'
     // Non-required parameters
-    applicationInsightsName: 'dep-ai-afamax'
-    appServicePlanName: 'afamax-asp'
+    applicationInsightsName: '<applicationInsightsName>'
+    appServicePlanName: '<appServicePlanName>'
     appServicePlanSkuCapacity: 2
     appServicePlanSkuName: 'EP1'
     appServicePlanZoneRedundant: true
@@ -301,7 +301,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
     }
     userAssignedIdentityResourceId: '<userAssignedIdentityResourceId>'
     virtualNetworkAddressPrefix: '10.20.0.0/24'
-    virtualNetworkName: 'afamax-vnet'
+    virtualNetworkName: '<virtualNetworkName>'
   }
 }
 ```
@@ -320,14 +320,14 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
   "parameters": {
     // Required parameters
     "functionAppName": {
-      "value": "afamax001"
+      "value": "<functionAppName>"
     },
     // Non-required parameters
     "applicationInsightsName": {
-      "value": "dep-ai-afamax"
+      "value": "<applicationInsightsName>"
     },
     "appServicePlanName": {
-      "value": "afamax-asp"
+      "value": "<appServicePlanName>"
     },
     "appServicePlanSkuCapacity": {
       "value": 2
@@ -416,7 +416,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
       "value": "10.20.0.0/24"
     },
     "virtualNetworkName": {
-      "value": "afamax-vnet"
+      "value": "<virtualNetworkName>"
     }
   }
 }
@@ -433,10 +433,10 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
 using 'br/public:avm/ptn/app/function-app:<version>'
 
 // Required parameters
-param functionAppName = 'afamax001'
+param functionAppName = '<functionAppName>'
 // Non-required parameters
-param applicationInsightsName = 'dep-ai-afamax'
-param appServicePlanName = 'afamax-asp'
+param applicationInsightsName = '<applicationInsightsName>'
+param appServicePlanName = '<appServicePlanName>'
 param appServicePlanSkuCapacity = 2
 param appServicePlanSkuName = 'EP1'
 param appServicePlanZoneRedundant = true
@@ -481,7 +481,7 @@ param tags = {
 }
 param userAssignedIdentityResourceId = '<userAssignedIdentityResourceId>'
 param virtualNetworkAddressPrefix = '10.20.0.0/24'
-param virtualNetworkName = 'afamax-vnet'
+param virtualNetworkName = '<virtualNetworkName>'
 ```
 
 </details>
@@ -501,7 +501,7 @@ param virtualNetworkName = 'afamax-vnet'
 | :-- | :-- | :-- |
 | [`applicationInsightsName`](#parameter-applicationinsightsname) | string | The name of the Application Insights component. Defaults to `<functionAppName>-ai`. |
 | [`appServicePlanName`](#parameter-appserviceplanname) | string | The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`. |
-| [`appServicePlanSkuCapacity`](#parameter-appserviceplanskucapacity) | int | Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically. |
+| [`appServicePlanSkuCapacity`](#parameter-appserviceplanskucapacity) | int | Number of workers for Premium and Dedicated App Service Plans. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. Flex Consumption scales dynamically. |
 | [`appServicePlanSkuName`](#parameter-appserviceplanskuname) | string | The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Premium and Dedicated SKUs also support subnet-restricted storage. Classic Consumption (`Y1`) is not supported because it lacks VNet integration. |
 | [`appServicePlanZoneRedundant`](#parameter-appserviceplanzoneredundant) | bool | Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2. |
 | [`appSettingsKeyValuePairs`](#parameter-appsettingskeyvaluepairs) | object | Application settings (`name`/`value` pairs) to merge into the Function App configuration. All values must be strings. Reserved keys managed by this module are silently dropped to keep the Function App in a working state — see `reservedAppSettingKeys` in `main.bicep` for the current list. |
@@ -552,7 +552,7 @@ The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`.
 
 ### Parameter: `appServicePlanSkuCapacity`
 
-Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically.
+Number of workers for Premium and Dedicated App Service Plans. Also sets the maximum elastic worker count for Elastic Premium so its ceiling is not below the requested capacity. Flex Consumption scales dynamically.
 
 - Required: No
 - Type: int
