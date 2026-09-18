@@ -4,7 +4,7 @@ Deploys an Azure Function App on Flex Consumption, Elastic Premium, or Dedicated
 
 This experimental configuration creates a same-region virtual network and a dedicated integration subnet with a Network Security Group and a Microsoft.Storage service endpoint. The subnet is delegated to Microsoft.App/environments for Flex Consumption or Microsoft.Web/serverFarms for other plans. Storage denies all networks except that subnet. Premium content shares are created explicitly and routed through the virtual network. The Function App and its authenticated deployment endpoint remain publicly reachable. The NSG blocks outbound SSH and RDP to the virtual network. No private endpoints, NAT gateway, or private DNS zones are provisioned. Flex Consumption requires the Microsoft.App resource provider to be registered and a supported region. The default /26 subnet is dedicated to this app; Windows Premium apps scaling to 100 instances should use /24. Choose non-overlapping address prefixes if connecting this network to other networks.
 
-For Elastic Premium, `WEBSITE_SKIP_CONTENTSHARE_VALIDATION=1` skips the provisioning-time content-share check that can be blocked by the storage firewall. The share is created before the app, and content-share traffic uses VNet integration. This setting does not bypass storage network rules or authentication; verify runtime content-share access when deploying application code. See [Azure Functions content-share validation](https://learn.microsoft.com/azure/azure-functions/functions-app-settings#website_skip_contentshare_validation).
+For Elastic Premium, the share is created before the app, and content-share traffic uses VNet integration. `WEBSITE_CONTENTOVERVNET=1` is retained as a provisioning compatibility setting alongside `outboundVnetRouting.contentShareTraffic`. `WEBSITE_SKIP_CONTENTSHARE_VALIDATION=1` skips the provisioning-time content-share check that can be blocked by the storage firewall. Neither setting bypasses storage network rules or authentication; verify runtime content-share access when deploying application code. See [Azure Functions content-share settings](https://learn.microsoft.com/azure/azure-functions/functions-app-settings#website_contentovervnet).
 
 Application Insights requires Microsoft Entra authentication. The Function App's managed identity receives the Monitoring Metrics Publisher role on the Application Insights resource, and the Functions host is configured to use that identity. Local authentication is disabled. Application code that sends telemetry directly through an SDK, such as a .NET isolated worker, must also configure Microsoft Entra credentials; the host setting alone does not configure every SDK. The Functions host's managed-identity authentication setting does not support local development. Use a separate development telemetry resource or an appropriately authenticated SDK for local telemetry. See [Configure monitoring for Azure Functions](https://learn.microsoft.com/azure/azure-functions/configure-monitoring#require-microsoft-entra-authentication).
 '''
@@ -98,7 +98,7 @@ param appServicePlanSkuName string = 'FC1'
 @minValue(1)
 param appServicePlanSkuCapacity int = 1
 
-@description('Optional. Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2.')
+@description('Optional. Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2. Also selects `Standard_ZRS` for the runtime and content storage account, as required for zone-redundant Functions hosting; otherwise storage uses `Standard_LRS`. Zone redundancy increases storage cost and requires a region that supports ZRS.')
 param appServicePlanZoneRedundant bool = false
 
 @description('Optional. The runtime stack of the Function App, e.g. `dotnet-isolated`, `node`, `python`, `java`, `powershell`. Note: `dotnet` (in-process .NET) is **not** supported on Flex Consumption (`FC1`); use `dotnet-isolated` instead.')
@@ -247,6 +247,7 @@ var reservedAppSettingKeys = [
   'WEBSITE_CONTENTAZUREFILECONNECTIONSTRING'
   'WEBSITE_CONTENTSHARE'
   'WEBSITE_SKIP_CONTENTSHARE_VALIDATION'
+  'WEBSITE_CONTENTOVERVNET'
 ]
 
 // Filter out reserved keys from user-supplied app settings so module-managed values always win.
@@ -309,9 +310,13 @@ var contentShareAppSettings = requiresContentShare
         name: 'WEBSITE_CONTENTSHARE'
         value: contentShareName
       }
-      // The share is pre-created; provisioning validation cannot use the app's VNet path yet.
+      // The share is pre-created; network restrictions can block provisioning-time validation.
       {
         name: 'WEBSITE_SKIP_CONTENTSHARE_VALIDATION'
+        value: '1'
+      }
+      {
+        name: 'WEBSITE_CONTENTOVERVNET'
         value: '1'
       }
     ]
@@ -522,7 +527,7 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.1' = {
     tags: union(tags ?? {}, { 'resource-usage': 'azure-functions' })
     enableTelemetry: enableTelemetry
     lock: lock
-    skuName: 'Standard_LRS'
+    skuName: appServicePlanZoneRedundant ? 'Standard_ZRS' : 'Standard_LRS'
     kind: 'StorageV2'
     // Flex Consumption Function Apps deploy from a blob container in the runtime Storage Account
     // referenced via `functionAppConfig.deployment.storage`. Create that container up-front so the
