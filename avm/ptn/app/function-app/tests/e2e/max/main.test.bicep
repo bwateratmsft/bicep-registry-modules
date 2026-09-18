@@ -28,9 +28,9 @@ param namePrefix string = '#_namePrefix_#'
 
 // General resources
 // =================
-// Test groups are intentionally unique per invocation; CI fixes baseTime across retries.
-#disable-next-line use-stable-resource-identifiers
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2025-04-01' = {
+  // Test groups are intentionally unique per invocation; CI fixes baseTime across retries.
+  #disable-next-line use-stable-resource-identifiers
   name: resourceGroupName
   location: resourceLocation
 }
