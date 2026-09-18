@@ -1027,6 +1027,8 @@ This section gives you an overview of all local-referenced module files (i.e., o
 | :-- | :-- |
 | `br/public:avm/res/insights/component:0.8.0` | Remote reference |
 | `br/public:avm/res/managed-identity/user-assigned-identity:0.6.0` | Remote reference |
+| `br/public:avm/res/network/network-security-group:0.5.3` | Remote reference |
+| `br/public:avm/res/network/virtual-network:0.10.2` | Remote reference |
 | `br/public:avm/res/operational-insights/workspace:0.16.1` | Remote reference |
 | `br/public:avm/res/storage/storage-account:0.33.1` | Remote reference |
 | `br/public:avm/res/web/serverfarm:0.7.0` | Remote reference |
