@@ -1,6 +1,8 @@
 metadata name = 'Function App Pattern'
 metadata description = '''
-Deploys an Azure Function App together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access wherever the selected plan family supports it).
+Deploys an Azure Function App on Flex Consumption, Elastic Premium, or Dedicated hosting together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access). Classic Consumption (Y1) is not supported because it cannot access network-secured host storage.
+
+This experimental configuration creates a same-region virtual network and a dedicated integration subnet with a Network Security Group and a Microsoft.Storage service endpoint. The subnet is delegated to Microsoft.App/environments for Flex Consumption or Microsoft.Web/serverFarms for other plans. Storage denies all networks except that subnet. Premium content shares are created explicitly and routed through the virtual network. The Function App and its authenticated deployment endpoint remain publicly reachable. The NSG blocks outbound SSH and RDP to the virtual network. No private endpoints, NAT gateway, or private DNS zones are provisioned. Flex Consumption requires the Microsoft.App resource provider to be registered and a supported region. The default /26 subnet is dedicated to this app; Windows Premium apps scaling to 100 instances should use /24. Choose non-overlapping address prefixes if connecting this network to other networks.
 
 Application Insights requires Microsoft Entra authentication. The Function App's managed identity receives the Monitoring Metrics Publisher role on the Application Insights resource, and the Functions host is configured to use that identity. Local authentication is disabled. Application code that sends telemetry directly through an SDK, such as a .NET isolated worker, must also configure Microsoft Entra credentials; the host setting alone does not configure every SDK. The Functions host's managed-identity authentication setting does not support local development. Use a separate development telemetry resource or an appropriately authenticated SDK for local telemetry. See [Configure monitoring for Azure Functions](https://learn.microsoft.com/azure/azure-functions/configure-monitoring#require-microsoft-entra-authentication).
 '''
@@ -31,6 +33,15 @@ param enableTelemetry bool = true
 @description('Optional. The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`.')
 param appServicePlanName string = '${functionAppName}-asp'
 
+@description('Optional. The name of the virtual network created for Function App integration.')
+param virtualNetworkName string = '${functionAppName}-vnet'
+
+@description('Optional. The IPv4 CIDR address space of the virtual network.')
+param virtualNetworkAddressPrefix string = '10.0.0.0/24'
+
+@description('Optional. The IPv4 CIDR prefix of the dedicated integration subnet. Must be within the virtual network address space. Use /27 or larger for Flex Consumption; /26 or larger is recommended for Premium and Dedicated scaling.')
+param integrationSubnetAddressPrefix string = '10.0.0.0/26'
+
 @description('Optional. The name of the Storage Account that backs the Function App runtime. Must be globally unique, 3-24 lowercase alphanumeric characters. Defaults to a deterministic name derived from `functionAppName`. Function App names only allow alphanumeric and hyphens, so only hyphens need to be stripped to satisfy Storage Account naming constraints.')
 // BCP334 fires because the linter cannot statically prove the resulting string is <= 24 chars; `take(..., 24)` enforces this at deploy time.
 #disable-next-line BCP334
@@ -46,7 +57,7 @@ param applicationInsightsName string = '${functionAppName}-ai'
 @description('Optional. Resource ID of an *existing* Log Analytics workspace (anywhere in the tenant) to associate with Application Insights. When empty, a new workspace named `<functionAppName>-law` is created in the current resource group.')
 param logAnalyticsWorkspaceResourceId string = ''
 
-@description('Optional. The kind of Function App to deploy. `functionapp` (Windows) and `functionapp,linux` (Linux) are the standard values; `functionapp,workflowapp` is for Logic Apps Standard. Container-based Function Apps (`functionapp,linux,container`) are not yet supported by this pattern module — they require dedicated container image / registry parameters and are planned for a future release.')
+@description('Optional. The kind of Function App. Flex Consumption requires `functionapp,linux`; Premium and Dedicated also support Windows (`functionapp`). Container-based Function Apps are not supported by this pattern.')
 @allowed([
   'functionapp'
   'functionapp,linux'
@@ -54,9 +65,8 @@ param logAnalyticsWorkspaceResourceId string = ''
 ])
 param functionAppKind string = 'functionapp,linux'
 
-@description('Optional. The SKU of the App Service Plan that hosts the Function App. Defaults to `FC1` (Flex Consumption). When `FC1` is selected the module wires up `functionAppConfig` (identity-based deployment storage, runtime, instance memory, max instance count) on the underlying `avm/res/web/site` module automatically; Flex Consumption is Linux-only and does not support the in-process `dotnet` runtime — use `dotnet-isolated` instead.')
+@description('Optional. The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Premium and Dedicated SKUs also support subnet-restricted storage. Classic Consumption (`Y1`) is not supported because it lacks VNet integration.')
 @allowed([
-  'Y1'
   'FC1'
   'B1'
   'B2'
@@ -82,11 +92,11 @@ param functionAppKind string = 'functionapp,linux'
 ])
 param appServicePlanSkuName string = 'FC1'
 
-@description('Optional. Number of workers for the App Service Plan.')
+@description('Optional. Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically.')
 @minValue(1)
 param appServicePlanSkuCapacity int = 1
 
-@description('Optional. Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in regions that offer availability zones, and requires `appServicePlanSkuCapacity` to be at least 2. Left `false` by default because zone redundancy increases cost and is not available in every region.')
+@description('Optional. Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2.')
 param appServicePlanZoneRedundant bool = false
 
 @description('Optional. The runtime stack of the Function App, e.g. `dotnet-isolated`, `node`, `python`, `java`, `powershell`. Note: `dotnet` (in-process .NET) is **not** supported on Flex Consumption (`FC1`); use `dotnet-isolated` instead.')
@@ -137,7 +147,7 @@ param autoGeneratedDomainNameLabelScope string?
 @description('Optional. The resource ID of an existing User-Assigned Managed Identity to assign to the Function App and use for runtime storage access and Application Insights ingestion. When not provided, a new identity is created and used.')
 param userAssignedIdentityResourceId string = ''
 
-@description('Optional. The version of the language runtime stack (e.g. `20` for Node 20, `3.11` for Python 3.11, `8.0` for .NET 8). When provided, sets `linuxFxVersion` for Linux Function Apps or the matching framework version property for Windows Function Apps. When empty AND the Function App is Linux, a sensible per-runtime default is applied (see `defaultLinuxRuntimeVersionMap` in `main.bicep`); Windows Function Apps fall back to the platform default for the chosen runtime.')
+@description('Optional. The language runtime version (e.g. `22` for Node.js 22, `3.11` for Python, or `8.0` for .NET). Sets `functionAppConfig.runtime` for Flex Consumption, `linuxFxVersion` for other Linux plans, or the matching framework version property on Windows. When empty, Linux uses the module defaults and Windows uses the platform default.')
 param runtimeVersion string = ''
 
 @description('Optional. The lock settings for all resources deployed by this module.')
@@ -153,7 +163,6 @@ param diagnosticSettings diagnosticSettingFullType[]?
 var isLinux = endsWith(functionAppKind, 'linux')
 
 // Plan family detection.
-var isConsumption = startsWith(appServicePlanSkuName, 'Y')
 var isFlexConsumption = startsWith(appServicePlanSkuName, 'FC')
 var isElasticPremium = startsWith(appServicePlanSkuName, 'EP')
 
@@ -165,11 +174,11 @@ var serverFarmKind = isFlexConsumption
   ? 'functionapp'
   : isElasticPremium
       ? (isLinux ? 'linux,elastic' : 'elastic')
-      : (isConsumption ? (isLinux ? 'functionapp,linux' : 'functionapp') : (isLinux ? 'linux' : 'app'))
+      : (isLinux ? 'linux' : 'app')
 
-// Consumption (Y1) and Elastic Premium (EP*) plans require a content share for
-// the Functions runtime. Dedicated/Flex plans do not.
-var requiresContentShare = isConsumption || isElasticPremium
+// Elastic Premium requires an Azure Files content share; Dedicated/Flex do not.
+var requiresContentShare = isElasticPremium
+var contentShareName = 'content${uniqueString(resourceGroup().id, functionAppName)}'
 
 // Maps the functionWorkerRuntime value to the prefix used in linuxFxVersion (Linux Function Apps).
 var linuxFxVersionPrefixMap = {
@@ -188,7 +197,7 @@ var defaultLinuxRuntimeVersionMap = {
   dotnet: '8.0'
   'dotnet-isolated': '8.0'
   java: '17'
-  node: '20'
+  node: '22'
   powershell: '7.4'
   python: '3.11'
 }
@@ -284,7 +293,7 @@ var runtimeAppSettingsBase = [
   }
 ]
 
-// Content-share settings required by Consumption and Elastic Premium plans.
+// Content-share settings required by Elastic Premium plans.
 // These still rely on a shared-key connection string because identity-based
 // content shares are not yet generally supported on those plan families.
 var contentShareAppSettings = requiresContentShare
@@ -295,7 +304,7 @@ var contentShareAppSettings = requiresContentShare
       }
       {
         name: 'WEBSITE_CONTENTSHARE'
-        value: toLower(functionAppName)
+        value: contentShareName
       }
     ]
   : []
@@ -324,6 +333,7 @@ var siteConfigBase = union(
     appSettings: appSettingsArray
   },
   runtimeVersionSiteConfig,
+  !isFlexConsumption && !isElasticPremium ? { alwaysOn: true } : {},
   !empty(corsAllowedOrigins)
     ? {
         cors: {
@@ -396,6 +406,61 @@ resource existingUserAssignedIdentity 'Microsoft.ManagedIdentity/userAssignedIde
 // ================ //
 // Resources        //
 // ================ //
+
+module integrationNetworkSecurityGroup 'br/public:avm/res/network/network-security-group:0.5.3' = {
+  name: take('${uniqueString(deployment().name, location)}-functionApp-nsg', 64)
+  params: {
+    name: '${functionAppName}-nsg'
+    location: location
+    tags: tags
+    enableTelemetry: enableTelemetry
+    lock: lock
+    securityRules: [
+      {
+        name: 'DenyOutboundManagement'
+        properties: {
+          description: 'Prevent the Function App subnet from initiating SSH or RDP within the virtual network.'
+          priority: 200
+          direction: 'Outbound'
+          access: 'Deny'
+          protocol: 'Tcp'
+          sourceAddressPrefix: '*'
+          sourcePortRange: '*'
+          destinationAddressPrefix: 'VirtualNetwork'
+          destinationPortRanges: [
+            '22'
+            '3389'
+          ]
+        }
+      }
+    ]
+  }
+}
+
+module virtualNetwork 'br/public:avm/res/network/virtual-network:0.10.2' = {
+  name: take('${uniqueString(deployment().name, location)}-functionApp-vnet', 64)
+  params: {
+    name: virtualNetworkName
+    location: location
+    tags: tags
+    enableTelemetry: enableTelemetry
+    lock: lock
+    addressPrefixes: [
+      virtualNetworkAddressPrefix
+    ]
+    subnets: [
+      {
+        name: 'functions'
+        addressPrefix: integrationSubnetAddressPrefix
+        delegation: isFlexConsumption ? 'Microsoft.App/environments' : 'Microsoft.Web/serverFarms'
+        networkSecurityGroupResourceId: integrationNetworkSecurityGroup.outputs.resourceId
+        serviceEndpoints: [
+          'Microsoft.Storage'
+        ]
+      }
+    ]
+  }
+}
 
 module userAssignedIdentity 'br/public:avm/res/managed-identity/user-assigned-identity:0.6.0' = if (createUserAssignedIdentity) {
   name: take('${uniqueString(deployment().name, location)}-functionApp-uami', 64)
@@ -470,16 +535,33 @@ module storageAccount 'br/public:avm/res/storage/storage-account:0.33.1' = {
         : null
     }
     allowBlobPublicAccess: false
+    fileServices: requiresContentShare
+      ? {
+          shares: [
+            {
+              name: contentShareName
+              enabledProtocols: 'SMB'
+              shareQuota: 5120
+            }
+          ]
+        }
+      : {}
     minimumTlsVersion: 'TLS1_2'
     // Identity-based access is used for the Functions runtime (`AzureWebJobsStorage__credential = managedidentity`).
     // Shared-key access is only enabled when the plan family requires a content-share connection string
-    // (Y1 Consumption and EP Elastic Premium), since `WEBSITE_CONTENTAZUREFILECONNECTIONSTRING` is still the
+    // (EP Elastic Premium), since `WEBSITE_CONTENTAZUREFILECONNECTIONSTRING` is still the
     // GA mechanism for those plans. Dedicated and Flex plans run fully identity-based.
     allowSharedKeyAccess: requiresContentShare
     publicNetworkAccess: 'Enabled'
     networkAcls: {
-      bypass: 'AzureServices'
-      defaultAction: 'Allow'
+      bypass: 'None'
+      defaultAction: 'Deny'
+      virtualNetworkRules: [
+        {
+          id: virtualNetwork.outputs.subnetResourceIds[0]
+          action: 'Allow'
+        }
+      ]
     }
     roleAssignments: [
       // Storage Blob Data Contributor – read/write access to blobs for the Function host and bindings.
@@ -516,9 +598,6 @@ module appServicePlan 'br/public:avm/res/web/serverfarm:0.7.0' = {
     skuCapacity: appServicePlanSkuCapacity
     kind: serverFarmKind
     reserved: isLinux
-    // Passed explicitly because the underlying serverfarm module defaults this to `true` for
-    // Premium and Elastic Premium SKUs, which fails to deploy unless the worker count is at
-    // least 2. Zone redundancy stays an explicit, opt-in choice for the consumer instead.
     zoneRedundant: appServicePlanZoneRedundant
   }
 }
@@ -534,6 +613,13 @@ module functionApp 'br/public:avm/res/web/site:0.24.0' = {
     diagnosticSettings: diagnosticSettings
     kind: functionAppKind
     serverFarmResourceId: appServicePlan.outputs.resourceId
+    virtualNetworkSubnetResourceId: virtualNetwork.outputs.subnetResourceIds[0]
+    outboundVnetRouting: isFlexConsumption
+      ? null
+      : {
+          applicationTraffic: true
+          contentShareTraffic: requiresContentShare
+        }
     httpsOnly: true
     clientAffinityEnabled: false
     managedIdentities: {

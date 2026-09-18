@@ -59,7 +59,10 @@ module testDeployment '../../../main.bicep' = [
       appServicePlanZoneRedundant: true
       functionAppKind: 'functionapp,linux'
       functionWorkerRuntime: 'node'
-      runtimeVersion: '20'
+      runtimeVersion: '22'
+      virtualNetworkName: '${namePrefix}${serviceShort}-vnet'
+      virtualNetworkAddressPrefix: '10.20.0.0/24'
+      integrationSubnetAddressPrefix: '10.20.0.0/26'
       storageAccountName: take(
         toLower('${namePrefix}${serviceShort}sa${uniqueString(resourceGroup.id, serviceShort)}'),
         24

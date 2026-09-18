@@ -1,6 +1,8 @@
 # Function App Pattern `[App/FunctionApp]`
 
-Deploys an Azure Function App together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access wherever the selected plan family supports it).
+Deploys an Azure Function App on Flex Consumption, Elastic Premium, or Dedicated hosting together with its supporting resources: an App Service Plan, a Storage Account for the Function runtime, an Application Insights component, a Log Analytics workspace, and a User-Assigned Managed Identity used for runtime storage access and Application Insights ingestion. Secure defaults are always applied (HTTPS-only, TLS 1.2 minimum, FTP/FTPS deployment disabled, no anonymous blob access, and identity-based runtime storage access). Classic Consumption (Y1) is not supported because it cannot access network-secured host storage.
+
+This experimental configuration creates a same-region virtual network and a dedicated integration subnet with a Network Security Group and a Microsoft.Storage service endpoint. The subnet is delegated to Microsoft.App/environments for Flex Consumption or Microsoft.Web/serverFarms for other plans. Storage denies all networks except that subnet. Premium content shares are created explicitly and routed through the virtual network. The Function App and its authenticated deployment endpoint remain publicly reachable. The NSG blocks outbound SSH and RDP to the virtual network. No private endpoints, NAT gateway, or private DNS zones are provisioned. Flex Consumption requires the Microsoft.App resource provider to be registered and a supported region. The default /26 subnet is dedicated to this app; Windows Premium apps scaling to 100 instances should use /24. Choose non-overlapping address prefixes if connecting this network to other networks.
 
 Application Insights requires Microsoft Entra authentication. The Function App's managed identity receives the Monitoring Metrics Publisher role on the Application Insights resource, and the Functions host is configured to use that identity. Local authentication is disabled. Application code that sends telemetry directly through an SDK, such as a .NET isolated worker, must also configure Microsoft Entra credentials; the host setting alone does not configure every SDK. The Functions host's managed-identity authentication setting does not support local development. Use a separate development telemetry resource or an appropriately authenticated SDK for local telemetry. See [Configure monitoring for Azure Functions](https://learn.microsoft.com/azure/azure-functions/configure-monitoring#require-microsoft-entra-authentication).
 
@@ -34,10 +36,14 @@ For examples, please refer to the [Usage Examples](#usage-examples) section.
 | `Microsoft.KeyVault/vaults/secrets` | 2024-11-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.keyvault_vaults_secrets.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.KeyVault/2024-11-01/vaults/secrets)</li></ul> |
 | `Microsoft.ManagedIdentity/userAssignedIdentities` | 2024-11-30 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.managedidentity_userassignedidentities.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.ManagedIdentity/2024-11-30/userAssignedIdentities)</li></ul> |
 | `Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials` | 2024-11-30 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.managedidentity_userassignedidentities_federatedidentitycredentials.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.ManagedIdentity/2024-11-30/userAssignedIdentities/federatedIdentityCredentials)</li></ul> |
+| `Microsoft.Network/networkSecurityGroups` | 2025-05-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_networksecuritygroups.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2025-05-01/networkSecurityGroups)</li></ul> |
 | `Microsoft.Network/privateEndpoints` | 2025-05-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_privateendpoints.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2025-05-01/privateEndpoints)</li></ul> |
 | `Microsoft.Network/privateEndpoints` | 2024-10-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_privateendpoints.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2024-10-01/privateEndpoints)</li></ul> |
 | `Microsoft.Network/privateEndpoints/privateDnsZoneGroups` | 2025-05-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_privateendpoints_privatednszonegroups.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2025-05-01/privateEndpoints/privateDnsZoneGroups)</li></ul> |
 | `Microsoft.Network/privateEndpoints/privateDnsZoneGroups` | 2024-10-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_privateendpoints_privatednszonegroups.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2024-10-01/privateEndpoints/privateDnsZoneGroups)</li></ul> |
+| `Microsoft.Network/virtualNetworks` | 2025-05-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_virtualnetworks.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2025-05-01/virtualNetworks)</li></ul> |
+| `Microsoft.Network/virtualNetworks/subnets` | 2025-05-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_virtualnetworks_subnets.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2025-05-01/virtualNetworks/subnets)</li></ul> |
+| `Microsoft.Network/virtualNetworks/virtualNetworkPeerings` | 2025-05-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.network_virtualnetworks_virtualnetworkpeerings.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.Network/2025-05-01/virtualNetworks/virtualNetworkPeerings)</li></ul> |
 | `Microsoft.OperationalInsights/workspaces` | 2025-07-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.operationalinsights_workspaces.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.OperationalInsights/2025-07-01/workspaces)</li></ul> |
 | `Microsoft.OperationalInsights/workspaces/dataExports` | 2025-07-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.operationalinsights_workspaces_dataexports.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.OperationalInsights/2025-07-01/workspaces/dataExports)</li></ul> |
 | `Microsoft.OperationalInsights/workspaces/dataSources` | 2025-07-01 | <ul style="padding-left: 0px;"><li>[AzAdvertizer](https://www.azadvertizer.net/azresourcetypes/microsoft.operationalinsights_workspaces_datasources.html)</li><li>[Template reference](https://learn.microsoft.com/en-us/azure/templates/Microsoft.OperationalInsights/2025-07-01/workspaces/dataSources)</li></ul> |
@@ -84,10 +90,101 @@ The following section provides usage examples for the module, which were used to
 
 >**Note**: To reference the module, please use the following syntax `br/public:avm/ptn/app/function-app:<version>`.
 
-- [Using only defaults](#example-1-using-only-defaults)
-- [Using large parameter set](#example-2-using-large-parameter-set)
+- [Using Dedicated Windows hosting](#example-1-using-dedicated-windows-hosting)
+- [Using only defaults](#example-2-using-only-defaults)
+- [Using large parameter set](#example-3-using-large-parameter-set)
 
-### Example 1: _Using only defaults_
+### Example 1: _Using Dedicated Windows hosting_
+
+This instance deploys a Windows Function App on a Dedicated plan with subnet-restricted runtime storage.
+
+You can find the full example and the setup of its dependencies in the deployment test folder path [/tests/e2e/dedicated]
+
+
+<details>
+
+<summary>via Bicep module</summary>
+
+```bicep
+module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
+  params: {
+    // Required parameters
+    functionAppName: 'afaded001'
+    // Non-required parameters
+    appServicePlanSkuName: 'B1'
+    functionAppKind: 'functionapp'
+    functionWorkerRuntime: 'dotnet-isolated'
+    integrationSubnetAddressPrefix: '10.30.0.0/26'
+    runtimeVersion: '8.0'
+    virtualNetworkAddressPrefix: '10.30.0.0/24'
+  }
+}
+```
+
+</details>
+<p>
+
+<details>
+
+<summary>via JSON parameters file</summary>
+
+```json
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    // Required parameters
+    "functionAppName": {
+      "value": "afaded001"
+    },
+    // Non-required parameters
+    "appServicePlanSkuName": {
+      "value": "B1"
+    },
+    "functionAppKind": {
+      "value": "functionapp"
+    },
+    "functionWorkerRuntime": {
+      "value": "dotnet-isolated"
+    },
+    "integrationSubnetAddressPrefix": {
+      "value": "10.30.0.0/26"
+    },
+    "runtimeVersion": {
+      "value": "8.0"
+    },
+    "virtualNetworkAddressPrefix": {
+      "value": "10.30.0.0/24"
+    }
+  }
+}
+```
+
+</details>
+<p>
+
+<details>
+
+<summary>via Bicep parameters file</summary>
+
+```bicep-params
+using 'br/public:avm/ptn/app/function-app:<version>'
+
+// Required parameters
+param functionAppName = 'afaded001'
+// Non-required parameters
+param appServicePlanSkuName = 'B1'
+param functionAppKind = 'functionapp'
+param functionWorkerRuntime = 'dotnet-isolated'
+param integrationSubnetAddressPrefix = '10.30.0.0/26'
+param runtimeVersion = '8.0'
+param virtualNetworkAddressPrefix = '10.30.0.0/24'
+```
+
+</details>
+<p>
+
+### Example 2: _Using only defaults_
 
 This instance deploys the module with the minimum set of required parameters.
 
@@ -141,7 +238,7 @@ param functionAppName = 'afamin001'
 </details>
 <p>
 
-### Example 2: _Using large parameter set_
+### Example 3: _Using large parameter set_
 
 This instance deploys the module with most of its features enabled.
 
@@ -188,13 +285,14 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
       'azd-service-name': 'api'
     }
     functionWorkerRuntime: 'node'
+    integrationSubnetAddressPrefix: '10.20.0.0/26'
     location: '<location>'
     lock: {
       kind: 'CanNotDelete'
       name: 'myCustomLockName'
     }
     logAnalyticsWorkspaceResourceId: '<logAnalyticsWorkspaceResourceId>'
-    runtimeVersion: '20'
+    runtimeVersion: '22'
     storageAccountName: '<storageAccountName>'
     tags: {
       Environment: 'Non-Prod'
@@ -202,6 +300,8 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
       Role: 'DeploymentValidation'
     }
     userAssignedIdentityResourceId: '<userAssignedIdentityResourceId>'
+    virtualNetworkAddressPrefix: '10.20.0.0/24'
+    virtualNetworkName: 'afamax-vnet'
   }
 }
 ```
@@ -281,6 +381,9 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
     "functionWorkerRuntime": {
       "value": "node"
     },
+    "integrationSubnetAddressPrefix": {
+      "value": "10.20.0.0/26"
+    },
     "location": {
       "value": "<location>"
     },
@@ -294,7 +397,7 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
       "value": "<logAnalyticsWorkspaceResourceId>"
     },
     "runtimeVersion": {
-      "value": "20"
+      "value": "22"
     },
     "storageAccountName": {
       "value": "<storageAccountName>"
@@ -308,6 +411,12 @@ module functionApp 'br/public:avm/ptn/app/function-app:<version>' = {
     },
     "userAssignedIdentityResourceId": {
       "value": "<userAssignedIdentityResourceId>"
+    },
+    "virtualNetworkAddressPrefix": {
+      "value": "10.20.0.0/24"
+    },
+    "virtualNetworkName": {
+      "value": "afamax-vnet"
     }
   }
 }
@@ -356,13 +465,14 @@ param functionAppTags = {
   'azd-service-name': 'api'
 }
 param functionWorkerRuntime = 'node'
+param integrationSubnetAddressPrefix = '10.20.0.0/26'
 param location = '<location>'
 param lock = {
   kind: 'CanNotDelete'
   name: 'myCustomLockName'
 }
 param logAnalyticsWorkspaceResourceId = '<logAnalyticsWorkspaceResourceId>'
-param runtimeVersion = '20'
+param runtimeVersion = '22'
 param storageAccountName = '<storageAccountName>'
 param tags = {
   Environment: 'Non-Prod'
@@ -370,6 +480,8 @@ param tags = {
   Role: 'DeploymentValidation'
 }
 param userAssignedIdentityResourceId = '<userAssignedIdentityResourceId>'
+param virtualNetworkAddressPrefix = '10.20.0.0/24'
+param virtualNetworkName = 'afamax-vnet'
 ```
 
 </details>
@@ -389,9 +501,9 @@ param userAssignedIdentityResourceId = '<userAssignedIdentityResourceId>'
 | :-- | :-- | :-- |
 | [`applicationInsightsName`](#parameter-applicationinsightsname) | string | The name of the Application Insights component. Defaults to `<functionAppName>-ai`. |
 | [`appServicePlanName`](#parameter-appserviceplanname) | string | The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`. |
-| [`appServicePlanSkuCapacity`](#parameter-appserviceplanskucapacity) | int | Number of workers for the App Service Plan. |
-| [`appServicePlanSkuName`](#parameter-appserviceplanskuname) | string | The SKU of the App Service Plan that hosts the Function App. Defaults to `FC1` (Flex Consumption). When `FC1` is selected the module wires up `functionAppConfig` (identity-based deployment storage, runtime, instance memory, max instance count) on the underlying `avm/res/web/site` module automatically; Flex Consumption is Linux-only and does not support the in-process `dotnet` runtime — use `dotnet-isolated` instead. |
-| [`appServicePlanZoneRedundant`](#parameter-appserviceplanzoneredundant) | bool | Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in regions that offer availability zones, and requires `appServicePlanSkuCapacity` to be at least 2. Left `false` by default because zone redundancy increases cost and is not available in every region. |
+| [`appServicePlanSkuCapacity`](#parameter-appserviceplanskucapacity) | int | Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically. |
+| [`appServicePlanSkuName`](#parameter-appserviceplanskuname) | string | The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Premium and Dedicated SKUs also support subnet-restricted storage. Classic Consumption (`Y1`) is not supported because it lacks VNet integration. |
+| [`appServicePlanZoneRedundant`](#parameter-appserviceplanzoneredundant) | bool | Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2. |
 | [`appSettingsKeyValuePairs`](#parameter-appsettingskeyvaluepairs) | object | Application settings (`name`/`value` pairs) to merge into the Function App configuration. All values must be strings. Reserved keys managed by this module are silently dropped to keep the Function App in a working state — see `reservedAppSettingKeys` in `main.bicep` for the current list. |
 | [`autoGeneratedDomainNameLabelScope`](#parameter-autogenerateddomainnamelabelscope) | string | The scope of uniqueness for the default hostname of the Function App during resource creation. |
 | [`corsAllowedOrigins`](#parameter-corsallowedorigins) | array | The list of origins that are permitted to make cross-origin requests to the Function App (e.g. `https://portal.azure.com`). When non-empty, these are set as the CORS allowed origins in the site configuration. |
@@ -401,16 +513,19 @@ param userAssignedIdentityResourceId = '<userAssignedIdentityResourceId>'
 | [`flexConsumptionDeploymentStorageContainerName`](#parameter-flexconsumptiondeploymentstoragecontainername) | string | (Flex Consumption only) Name of the blob container that stores the Function App's deployment package. Created in the runtime Storage Account when `appServicePlanSkuName` is `FC1`. |
 | [`flexConsumptionInstanceMemoryMB`](#parameter-flexconsumptioninstancememorymb) | int | (Flex Consumption only) Memory allocated to each instance of the Function App in MB. Allowed values are 512, 2048, and 4096. |
 | [`flexConsumptionMaximumInstanceCount`](#parameter-flexconsumptionmaximuminstancecount) | int | (Flex Consumption only) Maximum number of instances the Function App can scale out to. Allowed range is 40-1000. |
-| [`functionAppKind`](#parameter-functionappkind) | string | The kind of Function App to deploy. `functionapp` (Windows) and `functionapp,linux` (Linux) are the standard values; `functionapp,workflowapp` is for Logic Apps Standard. Container-based Function Apps (`functionapp,linux,container`) are not yet supported by this pattern module — they require dedicated container image / registry parameters and are planned for a future release. |
+| [`functionAppKind`](#parameter-functionappkind) | string | The kind of Function App. Flex Consumption requires `functionapp,linux`; Premium and Dedicated also support Windows (`functionapp`). Container-based Function Apps are not supported by this pattern. |
 | [`functionAppTags`](#parameter-functionapptags) | object | Additional tags to apply only to the Function App resource (merged on top of `tags`). Typically used to surface the AZD service mapping via the `azd-service-name` tag. |
 | [`functionWorkerRuntime`](#parameter-functionworkerruntime) | string | The runtime stack of the Function App, e.g. `dotnet-isolated`, `node`, `python`, `java`, `powershell`. Note: `dotnet` (in-process .NET) is **not** supported on Flex Consumption (`FC1`); use `dotnet-isolated` instead. |
+| [`integrationSubnetAddressPrefix`](#parameter-integrationsubnetaddressprefix) | string | The IPv4 CIDR prefix of the dedicated integration subnet. Must be within the virtual network address space. Use /27 or larger for Flex Consumption; /26 or larger is recommended for Premium and Dedicated scaling. |
 | [`location`](#parameter-location) | string | The Azure region into which all resources will be deployed. |
 | [`lock`](#parameter-lock) | object | The lock settings for all resources deployed by this module. |
 | [`logAnalyticsWorkspaceResourceId`](#parameter-loganalyticsworkspaceresourceid) | string | Resource ID of an *existing* Log Analytics workspace (anywhere in the tenant) to associate with Application Insights. When empty, a new workspace named `<functionAppName>-law` is created in the current resource group. |
-| [`runtimeVersion`](#parameter-runtimeversion) | string | The version of the language runtime stack (e.g. `20` for Node 20, `3.11` for Python 3.11, `8.0` for .NET 8). When provided, sets `linuxFxVersion` for Linux Function Apps or the matching framework version property for Windows Function Apps. When empty AND the Function App is Linux, a sensible per-runtime default is applied (see `defaultLinuxRuntimeVersionMap` in `main.bicep`); Windows Function Apps fall back to the platform default for the chosen runtime. |
+| [`runtimeVersion`](#parameter-runtimeversion) | string | The language runtime version (e.g. `22` for Node.js 22, `3.11` for Python, or `8.0` for .NET). Sets `functionAppConfig.runtime` for Flex Consumption, `linuxFxVersion` for other Linux plans, or the matching framework version property on Windows. When empty, Linux uses the module defaults and Windows uses the platform default. |
 | [`storageAccountName`](#parameter-storageaccountname) | string | The name of the Storage Account that backs the Function App runtime. Must be globally unique, 3-24 lowercase alphanumeric characters. Defaults to a deterministic name derived from `functionAppName`. Function App names only allow alphanumeric and hyphens, so only hyphens need to be stripped to satisfy Storage Account naming constraints. |
 | [`tags`](#parameter-tags) | object | Resource tags to apply to all created resources. The runtime Storage Account is always tagged with `resource-usage: azure-functions`. |
 | [`userAssignedIdentityResourceId`](#parameter-userassignedidentityresourceid) | string | The resource ID of an existing User-Assigned Managed Identity to assign to the Function App and use for runtime storage access and Application Insights ingestion. When not provided, a new identity is created and used. |
+| [`virtualNetworkAddressPrefix`](#parameter-virtualnetworkaddressprefix) | string | The IPv4 CIDR address space of the virtual network. |
+| [`virtualNetworkName`](#parameter-virtualnetworkname) | string | The name of the virtual network created for Function App integration. |
 
 ### Parameter: `functionAppName`
 
@@ -437,7 +552,7 @@ The name of the App Service Plan to create. Defaults to `<functionAppName>-asp`.
 
 ### Parameter: `appServicePlanSkuCapacity`
 
-Number of workers for the App Service Plan.
+Number of workers for Premium and Dedicated App Service Plans. Flex Consumption scales dynamically.
 
 - Required: No
 - Type: int
@@ -446,7 +561,7 @@ Number of workers for the App Service Plan.
 
 ### Parameter: `appServicePlanSkuName`
 
-The SKU of the App Service Plan that hosts the Function App. Defaults to `FC1` (Flex Consumption). When `FC1` is selected the module wires up `functionAppConfig` (identity-based deployment storage, runtime, instance memory, max instance count) on the underlying `avm/res/web/site` module automatically; Flex Consumption is Linux-only and does not support the in-process `dotnet` runtime — use `dotnet-isolated` instead.
+The SKU of the App Service Plan. Defaults to `FC1` (Linux Flex Consumption). Premium and Dedicated SKUs also support subnet-restricted storage. Classic Consumption (`Y1`) is not supported because it lacks VNet integration.
 
 - Required: No
 - Type: string
@@ -476,13 +591,12 @@ The SKU of the App Service Plan that hosts the Function App. Defaults to `FC1` (
     'S1'
     'S2'
     'S3'
-    'Y1'
   ]
   ```
 
 ### Parameter: `appServicePlanZoneRedundant`
 
-Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in regions that offer availability zones, and requires `appServicePlanSkuCapacity` to be at least 2. Left `false` by default because zone redundancy increases cost and is not available in every region.
+Whether to spread the App Service Plan across availability zones. Only supported on Premium (`P*v2`/`P*v3`/`P*mv3`) and Elastic Premium (`EP*`) SKUs in supported regions, and requires `appServicePlanSkuCapacity` to be at least 2.
 
 - Required: No
 - Type: bool
@@ -730,7 +844,7 @@ Enable/Disable usage telemetry for module.
 
 ### Parameter: `functionAppKind`
 
-The kind of Function App to deploy. `functionapp` (Windows) and `functionapp,linux` (Linux) are the standard values; `functionapp,workflowapp` is for Logic Apps Standard. Container-based Function Apps (`functionapp,linux,container`) are not yet supported by this pattern module — they require dedicated container image / registry parameters and are planned for a future release.
+The kind of Function App. Flex Consumption requires `functionapp,linux`; Premium and Dedicated also support Windows (`functionapp`). Container-based Function Apps are not supported by this pattern.
 
 - Required: No
 - Type: string
@@ -769,6 +883,14 @@ The runtime stack of the Function App, e.g. `dotnet-isolated`, `node`, `python`,
     'python'
   ]
   ```
+
+### Parameter: `integrationSubnetAddressPrefix`
+
+The IPv4 CIDR prefix of the dedicated integration subnet. Must be within the virtual network address space. Use /27 or larger for Flex Consumption; /26 or larger is recommended for Premium and Dedicated scaling.
+
+- Required: No
+- Type: string
+- Default: `'10.0.0.0/26'`
 
 ### Parameter: `location`
 
@@ -832,7 +954,7 @@ Resource ID of an *existing* Log Analytics workspace (anywhere in the tenant) to
 
 ### Parameter: `runtimeVersion`
 
-The version of the language runtime stack (e.g. `20` for Node 20, `3.11` for Python 3.11, `8.0` for .NET 8). When provided, sets `linuxFxVersion` for Linux Function Apps or the matching framework version property for Windows Function Apps. When empty AND the Function App is Linux, a sensible per-runtime default is applied (see `defaultLinuxRuntimeVersionMap` in `main.bicep`); Windows Function Apps fall back to the platform default for the chosen runtime.
+The language runtime version (e.g. `22` for Node.js 22, `3.11` for Python, or `8.0` for .NET). Sets `functionAppConfig.runtime` for Flex Consumption, `linuxFxVersion` for other Linux plans, or the matching framework version property on Windows. When empty, Linux uses the module defaults and Windows uses the platform default.
 
 - Required: No
 - Type: string
@@ -860,6 +982,22 @@ The resource ID of an existing User-Assigned Managed Identity to assign to the F
 - Required: No
 - Type: string
 - Default: `''`
+
+### Parameter: `virtualNetworkAddressPrefix`
+
+The IPv4 CIDR address space of the virtual network.
+
+- Required: No
+- Type: string
+- Default: `'10.0.0.0/24'`
+
+### Parameter: `virtualNetworkName`
+
+The name of the virtual network created for Function App integration.
+
+- Required: No
+- Type: string
+- Default: `[format('{0}-vnet', parameters('functionAppName'))]`
 
 ## Outputs
 
